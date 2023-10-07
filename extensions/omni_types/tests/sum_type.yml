@@ -1,0 +1,245 @@
+instance:
+  init:
+  - create extension omni_types cascade
+  - |
+      create or replace function get_type_size(data_type regtype)
+      returns integer as
+      $$
+        select
+      typlen
+      from
+        pg_type
+      where
+        oid = data_type
+      $$
+        language sql;
+
+tests:
+- name: Empty
+  steps:
+  - query: select omni_types.sum_type('empty', variadic array []::regtype[])
+    results:
+    - sum_type: empty
+
+  - dump_types: &dump_types select typ as typname,variants from omni_types.sum_types
+    query: *dump_types
+    results:
+    - typname: empty
+      variants: "{}"
+
+  - query: select null::empty is null as is_null;
+    results:
+    - is_null: true
+
+- name: Single fixed size by val
+  steps:
+  - query: |
+      select omni_types.sum_type('sum_type', 'integer')
+      sum_type
+    results:
+    - sum_type: sum_type
+
+  - query: select typ as typname,variants from omni_types.sum_types
+    results:
+    - typname: sum_type
+      variants: "{integer}"
+  
+  - query: select get_type_size('sum_type')
+    results:
+    - get_type_size: 8
+  
+  - query: select 'integer(100)'::sum_type
+    results:
+    - sum_type: integer(100)
+  
+  - query: select 'integer(100)'::sum_type::integer
+    results:
+    - int4: 100
+
+  - query: select 100::sum_type
+    results:
+    - sum_type: integer(100)
+
+- name: Multiple fixed size by val
+  steps:
+  - query: select omni_types.sum_type('sum_type', 'integer', 'bigint')
+    results:
+    - sum_type: sum_type
+
+  # todo: list data types
+
+  - query: select typ as typname,variants from omni_types.sum_types # using dump_types anchor (*dump_types triggers segfault)
+    results:
+    - typname: sum_type
+      variants: '{integer,bigint}'
+
+  - query: select get_type_size('sum_type')
+    results:
+    - get_type_size: 12
+  
+  - query: select 'integer(1000)'::sum_type
+    results:
+    - sum_type: 'integer(1000)'
+
+  - query: select 'integer(1000)'::sum_type::integer
+    results:
+    - int4: 1000
+  
+  - query: select 1000::sum_type
+    results:
+    - sum_type: 'integer(1000)'
+
+  - query: select 'bigint(10000000000)'::sum_type
+    results:
+    - sum_type: bigint(10000000000)
+  
+  - query: select 10000000000::bigint::sum_type
+    results:
+    - sum_type: bigint(10000000000)
+
+- name: Single fixed size
+  steps:
+  - query: select omni_types.sum_type('sum_type', 'name')
+    results:
+    - sum_type: sum_type
+    
+    #\dT;
+    
+  - query: *dump_types
+    results:
+    - typname: sum_type
+      variants: '{name}'
+
+  - query: select get_type_size('sum_type')
+    results:
+    - get_type_size : 68
+
+  - query: select 'name(test)'::sum_type
+    results:
+    - sum_type: 'name(test)'
+
+  - query: select 'name(test)'::sum_type::name
+    results:
+    - name : test
+    
+  - query: select 'test'::name::sum_type
+    results:
+    - sum_type: 'name(test)'
+
+- name: Multiple mixed variable and fixed size
+  steps:
+  - query: select omni_types.sum_type('sum_type', 'text', 'integer', 'name')
+    results:
+    - sum_type: sum_type
+  
+  #\dT;
+  
+  - query: *dump_types
+    results:
+    - typname: sum_type
+      variants: '{text,integer,name}'
+
+  - query: select get_type_size('sum_type')
+    results:
+    - get_type_size: -1
+
+  - query: select 'text(Hello)'::sum_type
+    results:
+    - sum_type: 'text(Hello)'
+
+  - query: select 'text(Hello)'::sum_type::text
+    results:
+    - text: Hello
+  
+  - query: select 'Hello'::text::sum_type
+    results:
+    - sum_type: 'text(Hello)'
+
+  #- query: select 'integer(1000)'::sum_type
+  #  results:
+  #  - sum_type: 'integer(1000)'
+
+  #- query: select 'integer(1000)'::sum_type::integer
+  #  results:
+  #  - int4: 1000
+
+  - query: select 1000::sum_type
+    results:
+    - sum_type: integer(1000)
+
+  - query: select 'name(test)'::sum_type
+    results:
+    - sum_type: 'name(test)'
+
+  - query: select 'name(test)'::sum_type::name
+    results:
+    - name: test
+
+  - query: select 'test'::name::sum_type
+    results:
+    - sum_type: 'name(test)'
+
+- name: Domains
+  steps:
+  - query: create domain height as integer check (value > 0);
+  - query: create domain age as integer check (value > 0 and value < 200);
+  - query: select omni_types.sum_type('sum_type', 'height', 'age');
+    results:
+    - sum_type: sum_type
+
+  - query: *dump_types
+    results:
+    - typname: sum_type
+      variants: '{height,age}'
+
+  - query: select get_type_size('sum_type')
+    results:
+    - get_type_size: 8
+
+  - query: select 'height(100)'::sum_type
+    results:
+    - sum_type: 'height(100)'
+
+  - query: select 'age(100)'::sum_type
+    results:
+    - sum_type: 'age(100)'
+
+  - name: Can't cast domain types, use functions
+    query: select sum_type_from_height(100)
+    results:
+    - sum_type_from_height: 'height(100)'
+
+  - query: select sum_type_from_age(100)
+    results:
+    - sum_type_from_age: 'age(100)'
+
+- name: Composite types
+  steps:
+  - query: create type person as (name text, dob  date)
+  - query: create type animal as enum ('dog', 'cat', 'fish', 'other')
+  - query: create type pet as (name text, animal animal)
+  - query: select omni_types.sum_type('sum_type', 'person', 'pet')
+    results:
+    - sum_type: sum_type
+
+  - query: *dump_types
+    results:
+    - typname: sum_type
+      variants: '{person,pet}'
+
+  - query: select get_type_size('sum_type')
+    results:
+    - get_type_size: -1
+
+  - query: select $$person((John, 01/01/1980))$$::sum_type
+    results:
+    - sum_type: 'person((John,1980-01-01))'
+
+  - query: select $$pet((Charlie,dog))$$::sum_type
+    results:
+    - sum_type: 'pet((Charlie,dog))'
+
+  - query: select row ('John', '01/10/1980')::person::sum_type
+    results:
+    - row: person((John,1980-01-10))
+
