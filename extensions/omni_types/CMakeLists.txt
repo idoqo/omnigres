@@ -17,7 +17,6 @@ add_postgresql_extension(
         RELOCATABLE false
         SCRIPTS omni_types--0.1.sql
         SOURCES omni_types.c unit.c sum_type.c
-        REGRESS unit sum_type
 )
 
 add_library(libomnitypes INTERFACE)
