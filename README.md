@@ -33,7 +33,7 @@ psql -h localhost -p 5432 -U omnigres omnigres # password is `omnigres`
 ```
 
 Postgres parameters such as database, user or password can be overridden as per the
-"Environment Variales" section in [postgres image instructions](https://hub.docker.com/_/postgres/)
+"Environment Variables" section in [postgres image instructions](https://hub.docker.com/_/postgres/)
 
 You can access the HTTP server at [localhost:8080](http://localhost:8080)
 
@@ -104,6 +104,7 @@ Below is the current list of components being worked on, experimented with and d
 |---------------------------------------------------------------------------------------------|-------------------------------------------------------------------------|-------------------------------------------------------|
 | [omni_schema](extensions/omni_schema/README.md)                                             | :white_check_mark: First release candidate                              | Application schema management                         |
 | [omni_json](extensions/omni_json/README.md)                                                 | :white_check_mark: First release candidate                              | JSON toolkit                                          |
+| [omni_xml](extensions/omni_xml/README.md)                                                   | :white_check_mark: First release candidate                              | XML toolkit                                           |
 | [omni_http](extensions/omni_http/README.md)                                                 | :white_check_mark: First release candidate                              | Common HTTP types library                             |
 | [omni_httpd](extensions/omni_httpd/README.md) and [omni_web](extensions/omni_web/README.md) | :white_check_mark: First release candidate                              | Serving HTTP in Postgres and building services in SQL |
 | [omni_mimetypes](extensions/omni_mimetypes/README.md)                                       | :white_check_mark: First release candidate                              | MIME types and file extensions                        |
@@ -126,8 +127,8 @@ Below is the current list of components being worked on, experimented with and d
 To build and run Omnigres, you would currently need a recent C compiler, OpenSSL and cmake:
 
 ```shell
-mkdir -p build && cd build
-cmake ..
+cmake -S . -B build
+cmake --build build --parallel
 make psql_<COMPONENT_NAME> # for example, `psql_omni_containers`
 ```
 

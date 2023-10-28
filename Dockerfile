@@ -45,7 +45,7 @@ RUN git config --global --add safe.directory '*'
 # PostgreSQL build
 FROM builder AS postgres-build
 COPY docker/CMakeLists.txt /omni/CMakeLists.txt
-COPY cmake/FindPostgreSQL.cmake docker/PostgreSQLExtension.cmake /omni/cmake/
+COPY cmake/FindPostgreSQL.cmake cmake/OpenSSL.cmake docker/PostgreSQLExtension.cmake /omni/cmake/
 WORKDIR /build
 RUN cmake -DCMAKE_BUILD_TYPE=${BUILD_TYPE} -DPG=${PG} -DCMAKE_BUILD_PARALLEL_LEVEL=${BUILD_PARALLEL_LEVEL} /omni
 
@@ -59,7 +59,7 @@ RUN make -j ${BUILD_PARALLEL_LEVEL} all
 RUN make package
 
 # plrust build
-FROM ghcr.io/omnigres/postgres-16 AS plrust
+FROM postgres:${PG}-${DEBIAN_VER_PG}  AS plrust
 ARG PLRUST_VERSION
 ENV PLRUST_VERSION=${PLRUST_VERSION}
 ARG PG
@@ -85,17 +85,18 @@ RUN PG_VER=${PG%.*} && . "$HOME/.cargo/env" && cd plrust/plrust && \
     cargo pgrx package --features "pg${PG_VER} trusted"
 
 # Official slim PostgreSQL build
-FROM ghcr.io/omnigres/postgres-16 AS pg-slim
+FROM postgres:${PG}-${DEBIAN_VER_PG} AS pg-slim
 ARG PG
 ENV PG=${PG}
 ENV POSTGRES_DB=omnigres
 ENV POSTGRES_USER=omnigres
 ENV POSTGRES_PASSWORD=omnigres
 COPY --from=build /build/packaged /omni
+COPY --from=build /build/python-index /python-packages
 COPY docker/initdb-slim/* /docker-entrypoint-initdb.d/
 RUN cp -R /omni/extension $(pg_config --sharedir)/ && cp -R /omni/*.so $(pg_config --pkglibdir)/ && rm -rf /omni
 RUN apt update && apt -y install libtclcl1 libpython3.9 libperl5.32
-RUN PG_VER=${PG%.*} && apt update && apt -y install postgresql-pltcl-${PG_VER} postgresql-plperl-${PG_VER} postgresql-plpython3-${PG_VER}
+RUN PG_VER=${PG%.*} && apt update && apt -y install postgresql-pltcl-${PG_VER} postgresql-plperl-${PG_VER} postgresql-plpython3-${PG_VER} python3-dev python3-venv python3-pip
 EXPOSE 8080
 EXPOSE 5432
 

@@ -60,16 +60,22 @@ typedef struct {
 #define i_val db_info
 #include <stc/cmap.h>
 
+static bool terminate = false;
+static void sigterm(SIGNAL_ARGS) {
+  terminate = true;
+  SetLatch(MyLatch);
+}
+
 void master_worker(Datum main_arg) {
   BackgroundWorkerInitializeConnection(NULL, NULL, 0);
 
-  pqsignal(SIGTERM, die);
+  pqsignal(SIGTERM, sigterm);
 
   BackgroundWorkerUnblockSignals();
 
   cmap_db databases = cmap_db_init();
 
-  while (true) {
+  while (!terminate) {
     CHECK_FOR_INTERRUPTS();
 
     StartTransactionCommand();
@@ -91,7 +97,7 @@ void master_worker(Datum main_arg) {
                                        BGWORKER_SHMEM_ACCESS | BGWORKER_BACKEND_DATABASE_CONNECTION,
                                    .bgw_main_arg = ObjectIdGetDatum(db->oid),
                                    .bgw_start_time = BgWorkerStart_RecoveryFinished,
-                                   .bgw_restart_time = 0,
+                                   .bgw_restart_time = BGW_NEVER_RESTART,
                                    .bgw_function_name = "database_worker",
                                    .bgw_notify_pid = MyProcPid};
         strncpy(worker.bgw_library_name, get_library_name(), BGW_MAXLEN);
@@ -149,7 +155,7 @@ void database_worker(Datum db_oid) {
   ensure_dsa_attached();
   BackgroundWorkerInitializeConnectionByOid(db_oid, InvalidOid, 0);
 
-  pqsignal(SIGTERM, die);
+  pqsignal(SIGTERM, sigterm);
 
   BackgroundWorkerUnblockSignals();
 
@@ -161,7 +167,7 @@ void database_worker(Datum db_oid) {
   // This stores locally initialized extensions
   cset_oid extensions = cset_oid_init();
 
-  while (true) {
+  while (!terminate) {
 
     StartTransactionCommand();
 
@@ -248,6 +254,7 @@ void database_worker(Datum db_oid) {
             if (!global_background_worker) {
               bgw.ref->bgw.bgw_main_arg = db_oid;
             }
+            bgw.ref->bgw.bgw_restart_time = BGW_NEVER_RESTART;
             RegisterDynamicBackgroundWorker(&bgw.ref->bgw, &handle);
             if (bgw.ref->callback) {
               bgw.ref->callback(handle, bgw.ref->data);

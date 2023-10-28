@@ -1,3 +1,11 @@
+create type config_key as enum ( 'site_packages', 'extra_pip_index_url' );
+create table config
+(
+    id    integer primary key generated always as identity,
+    name config_key not null,
+    value text not null
+);
+
 create function functions(code text, filename text default null)
     returns table
             (
@@ -24,8 +32,12 @@ $$
         from typing import Union as UnionType
 
     site_packages = os.path.expanduser(
-        plpy.execute(plpy.prepare("select current_setting('omni_python.site_packages', true)"))[0][
-            'current_setting'] or "~/.omni_python/default")
+        plpy.execute(plpy.prepare("""
+                     select coalesce(
+                        (select value from omni_python.config where name = 'site_packages'),
+                        (select (setting || '/.omni_python/default') as value from pg_settings where name = 'data_directory'))
+                        as value
+       """))[0]['value'])
 
     sys.path.insert(0, site_packages)
     import omni_python
@@ -38,14 +50,26 @@ $$
         if '__omni_python_functions__' not in GD:
             GD['__omni_python__functions__'] = {}
         GD['__omni_python__functions__'][hash] = code_locals
-    except SyntaxError:
-        pass
+    except SyntaxError as e:
+        # Is the syntax error here because this is a "legacy" Python function
+        # (code you stick inside of `create function`'s body) as intended to be
+        # used by bare plpython3u?
+        try:
+            import textwrap
+            # Stick it into a function and see if it is valid now
+            exec(compile(f"def __test_function_():\n{textwrap.indent(code, ' ')}",
+                         filename or 'unnamed.py', 'exec'), {})
+            # It is. Let the other handler do it as we won't extract anything
+            return []
+        except SyntaxError:
+            # It's not. Re-raise the original error
+            raise e
 
     pg_functions = []
     for name, value in code_locals.items():
         if callable(value):
             if hasattr(value, '__pg_stored_procedure__'):
-                pg_functions.append((name, value))
+                pg_functions.append((name, value, value.__pg_stored_procedure__))
 
     __types__ = {str: 'text', bool: 'boolean', bytes: 'bytea', int: 'int',
                  decimal.Decimal: 'numeric', float: 'double precision'}
@@ -106,7 +130,7 @@ $$
 
     from textwrap import dedent
 
-    return [(name,
+    return [(pgargs.get('name', name),
              [a for a in inspect.getfullargspec(f).args],
              [resolve_type(f, a) for a in inspect.getfullargspec(f).args], resolve_type(f, 'return'),
              dedent("""
@@ -126,7 +150,7 @@ $$
                          args=', '.join(
                              [process_argument(f, a) for a in
                               inspect.getfullargspec(f).args])))
-            for name, f in pg_functions]
+            for name, f, pgargs in pg_functions]
 $$;
 
 create function create_functions(code text, filename text default null, replace boolean default false) returns setof regprocedure
@@ -171,8 +195,12 @@ as
 $$
     import os
     site_packages = os.path.expanduser(
-        plpy.execute(plpy.prepare("select current_setting('omni_python.site_packages', true)"))[0][
-            'current_setting'] or "~/.omni_python/default")
+        plpy.execute(plpy.prepare("""
+                     select coalesce(
+                        (select value from omni_python.config where name = 'site_packages'),
+                        (select (setting || '/.omni_python/default') as value from pg_settings where name = 'data_directory'))
+                        as value
+       """))[0]['value'])
     import sys
     sys.path.insert(0, site_packages)
     del sys
@@ -190,11 +218,20 @@ $$
     import tempfile
 
     site_packages = os.path.expanduser(
-        plpy.execute(plpy.prepare("select current_setting('omni_python.site_packages', true)"))[0][
-            'current_setting'] or "~/.omni_python/default")
+        plpy.execute(plpy.prepare("""
+                     select coalesce(
+                        (select value from omni_python.config where name = 'site_packages'),
+                        (select (setting || '/.omni_python/default') as value from pg_settings where name = 'data_directory'))
+                        as value
+       """))[0]['value'])
 
-    index = plpy.execute(plpy.prepare("select current_setting('omni_python.extra_pip_index_url', true)"))[0][
-        'current_setting']
+    if not os.path.exists(site_packages):
+        os.makedirs(site_packages)
+
+    index = plpy.execute(
+        plpy.prepare(
+            "select (select value from omni_python.config where name = 'extra_pip_index_url') as value"))[0][
+        'value']
 
     requirements_txt = tempfile.mktemp()
     with open(requirements_txt, 'w') as f:

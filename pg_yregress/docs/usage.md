@@ -6,7 +6,7 @@ title: Usage of pg_yregress
 
 Despite being inspired by `pg_regress`, `pg_yregress` is not in any way compatible with `pg_regress` as it has a different workflow and an execution model.
 
-{% include-markdown "_install.md" heading-offset=1 %}
+{% include-markdown "./_install.md" heading-offset=1 %}
 
 ## Basic workflow
 
@@ -409,6 +409,41 @@ instance:
   - create extension ltree
 ```
 
+## Unmanaged instances
+
+By default, `pg_yregress` manages Postgres instances itself: provisions the
+database and its configuration, starts and stops processes. However, it can also
+be used to run tests against other instances of Postgres operated outside of its
+own workflow. This can be used for testing functionality or data patterns in an
+existing database.
+
+In order to use it, one has to pass one of the following options:
+
+| Option        | Short | Description                                                                                           |
+|---------------|-------|-------------------------------------------------------------------------------------------------------|
+| --host        | -h    | Host to connect to. Defaults to `127.0.0.1` if other options are selected.                            |
+| --port        | -p    | Port to connect to. Default to `5432` if not specified.                                               |
+| --username    | -U    | Username. Defaults to current username.                                                               |
+| --dbname      | -d    | Database name. Defaults to username.                                                                  |
+| --password    | -W    | Force to prompt for a password before connecting to the database.                                     |
+| --no-password | -w    | Never issue a password prompt. Will attempt to get a password from `PGPASSWORD` environment variable. |
+
+For example, this will attempt to connect to a local Postgres instance on port
+5432 using `omnigres` as a database name and a username, prompting for a
+password:
+
+```shell
+pg_yregress -U omnigres -W tests.yml
+```
+
+!!! tip "Caveats"
+
+    The following options are not available for unmanaged instances and will
+    make pg_yregress terminate early with a corresponding error message.
+
+    * `instance` and `instances` configuration keys
+    * `restart` tests
+
 ## Configuring test suite
 
 In certain cases, it may be useful to pass some configuration information to the
@@ -426,4 +461,16 @@ retrieve configuration specified through environment variables:
   - */env/USER
   results:
   - user: */env/USER
+```
+
+### Named test suites
+
+A test suite (the YAML file) can be given a human-readable name using
+optional `name` property:
+
+```yaml
+name: Core tests
+
+tests:
+...
 ```
