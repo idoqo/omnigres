@@ -21,4 +21,3 @@ tests:
     unit_send
   results:
   - unit_send: \x
-    
