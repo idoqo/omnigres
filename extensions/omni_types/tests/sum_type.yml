@@ -100,7 +100,7 @@ tests:
       name: sum_type
       description: null
 
-  - query: select typ as typname,variants from omni_types.sum_types # using dump_types anchor (*dump_types triggers segfault)
+  - query: *dump_types
     results:
     - typname: sum_type
       variants: '{integer,bigint}'
@@ -195,13 +195,13 @@ tests:
     results:
     - sum_type: 'text(Hello)'
 
-  #- query: select 'integer(1000)'::sum_type
-  #  results:
-  #  - sum_type: 'integer(1000)'
+  - query: select 'integer(1000)'::sum_type
+    results:
+    - sum_type: 'integer(1000)'
 
-  #- query: select 'integer(1000)'::sum_type::integer
-  #  results:
-  #  - int4: 1000
+  - query: select 'integer(1000)'::sum_type::integer
+    results:
+    - int4: 1000
 
   - query: select 1000::sum_type
     results:
@@ -364,7 +364,6 @@ tests:
   error:
     severity: ERROR
     message: Sum types can not contain duplicate variants
-    #todo: how to specify context
   
 - name: Determining variant
   steps:
@@ -453,21 +452,31 @@ tests:
     results:
     - sum_type_recv: 'text(Hello)'
 
-  #- query: select sum_type_recv(sum_type_send('integer(1000)'));
-  #  results:
-  #  - sum_type_recv: 'integer(1000)'
+  - query: select sum_type_recv(sum_type_send('integer(1000)'));
+    results:
+    - sum_type_recv: 'integer(1000)'
 
-#-- Malformed input
-#savepoint try;
-#select sum_type_recv(E''::bytea);
-#ERROR:  input is too short to fit a discriminant
-#rollback to savepoint try;
-#select sum_type_recv(int4send(1));
-#ERROR:  insufficient data left in message
-#rollback to savepoint try;
-#select sum_type_recv(int4send(2));
-#ERROR:  invalid discriminant
-#rollback to savepoint try;
+  - name: Malformed input
+    query: savepoint try
+  - query: select sum_type_recv(E''::bytea);
+    error:
+      severity: ERROR
+      message: input is too short to fit a discriminant
+  - query: rollback to savepoint try
+
+  - query: savepoint try
+  - query: select sum_type_recv(int4send(3))
+    error:
+      severity: ERROR
+      message:  insufficient data left in message
+  - query: rollback to savepoint try
+
+  - query: savepoint try
+  - query: select sum_type_recv(int4send(2))
+    error:
+      severity: ERROR
+      MESSAGE: invalid discriminant
+  - query: rollback to savepoint try
 
 - name: Adding variants
   steps:

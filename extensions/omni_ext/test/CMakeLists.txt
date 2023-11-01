@@ -18,8 +18,7 @@ add_postgresql_extension(
         RELOCATABLE false
         SCRIPTS omni_ext_test--0.1.sql
         SOURCES omni_ext_test.c
-        REQUIRES omni_ext
-        REGRESS load re_load load_version shmem global_bgworker database_local_bgworker)
+        REQUIRES omni_ext)
 
 add_postgresql_extension(
         omni_ext_test_no_preload
@@ -29,8 +28,7 @@ add_postgresql_extension(
         RELOCATABLE false
         SCRIPTS omni_ext_test_no_preload--0.1.sql
         SOURCES omni_ext_test.c
-        REQUIRES omni_ext
-        REGRESS shmem_no_preload)
+        REQUIRES omni_ext)
 
 target_link_libraries(omni_ext_test dynpgext)
 

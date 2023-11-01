@@ -19,7 +19,8 @@ instances:
       - create extension omni_ext_test_no_preload cascade
 
 tests:
-  - query: select omni_ext.load('omni_ext_test')
+  - name: load
+    query: select omni_ext.load('omni_ext_test')
     results:
       - load: 0.1
 
@@ -44,6 +45,16 @@ tests:
         query: select omni_ext_test.alloc_shmem_database_local()
         results:
           - alloc_shmem_database_local: 'testdb 0'
+      
+#CREATE DATABASE another_db;
+#\connect another_db
+#CREATE EXTENSION omni_ext_test CASCADE;
+#NOTICE:  installing required extension "omni_ext"
+#SELECT omni_ext_test.alloc_shmem_database_local();
+# alloc_shmem_database_local 
+#----------------------------
+# testdb 1
+#(1 row)
 
   - name: reloading
     instance: with_omni_ext_test
@@ -63,7 +74,26 @@ tests:
       - name: should not be rolled back to the initial value
         query: select omni_ext_test.alloc_shmem_global()
         results:
-          - alloc_shmem_global: updated
+        - alloc_shmem_global: updated
+        
+
+  - name: database local bgworker
+    instance: with_omni_ext_test
+    steps:
+    - query: select omni_ext_test.wait_for_table('local_worker_started')
+      results:
+      - wait_for_table: true
+    
+    #\d global_worker_started;
+  
+  - name: global bg worker
+    instance: with_omni_ext_test
+    steps:
+    - query: SELECT omni_ext_test.wait_for_table('global_worker_started')
+      results:
+      - wait_for_table: true
+    
+    #\d global_worker_started;
 
   - name: shmem no preload
     instance: with_omni_ext_test_no_preload
@@ -89,3 +119,12 @@ tests:
         query: select omni_ext_test_no_preload.alloc_shmem_database_local()
         results:
         - alloc_shmem_database_local: testdb 0
+
+#CREATE DATABASE another_db;
+#\connect another_db
+#CREATE EXTENSION omni_ext_test_no_preload CASCADE;
+#NOTICE:  installing required extension "omni_ext"
+#SELECT omni_ext_test_no_preload.alloc_shmem_database_local();
+# alloc_shmem_database_local 
+#----------------------------
+# testdb 1
