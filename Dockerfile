@@ -22,7 +22,7 @@ ARG PLRUST_VERSION=1.2.6
 FROM debian:${DEBIAN_VER}-slim AS builder
 RUN echo "deb http://deb.debian.org/debian bullseye-backports main contrib non-free" >> /etc/apt/sources.list 
 RUN apt update
-RUN apt install -y wget build-essential git clang lld flex libreadline-dev zlib1g-dev libssl-dev tmux lldb gdb make perl python3-dev python3-venv python3-pip
+RUN apt install -y wget build-essential git clang lld flex libreadline-dev zlib1g-dev libssl-dev tmux lldb gdb make perl python3-dev python3-venv python3-pip netcat
 # current cmake is too old
 ARG DEBIAN_VER
 ENV DEBIAN_VER=${DEBIAN_VER}
@@ -93,6 +93,7 @@ ENV POSTGRES_USER=omnigres
 ENV POSTGRES_PASSWORD=omnigres
 COPY --from=build /build/packaged /omni
 COPY --from=build /build/python-index /python-packages
+COPY --from=build /build/python-wheels /python-wheels
 COPY docker/initdb-slim/* /docker-entrypoint-initdb.d/
 RUN cp -R /omni/extension $(pg_config --sharedir)/ && cp -R /omni/*.so $(pg_config --pkglibdir)/ && rm -rf /omni
 RUN apt update && apt -y install libtclcl1 libpython3.9 libperl5.32
