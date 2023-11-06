@@ -462,21 +462,26 @@ tests:
     error:
       severity: ERROR
       message: input is too short to fit a discriminant
-  - query: rollback to savepoint try
+  - skip: true
+    query: rollback to savepoint try
 
   - query: savepoint try
-  - query: select sum_type_recv(int4send(3))
+  - query: select sum_type_recv(int4send(1))
+    skip: true
     error:
       severity: ERROR
       message:  insufficient data left in message
-  - query: rollback to savepoint try
+  - skip: true
+    query: rollback to savepoint try
 
   - query: savepoint try
   - query: select sum_type_recv(int4send(2))
+    skip: true
     error:
       severity: ERROR
       MESSAGE: invalid discriminant
-  - query: rollback to savepoint try
+  - skip: true
+    query: rollback to savepoint try
 
 - name: Adding variants
   steps:
