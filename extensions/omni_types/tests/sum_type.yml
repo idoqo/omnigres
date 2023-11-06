@@ -457,31 +457,20 @@ tests:
     - sum_type_recv: 'integer(1000)'
 
   - name: Malformed input
-    query: savepoint try
   - query: select sum_type_recv(E''::bytea);
     error:
       severity: ERROR
       message: input is too short to fit a discriminant
-  - skip: true
-    query: rollback to savepoint try
 
-  - query: savepoint try
   - query: select sum_type_recv(int4send(1))
-    skip: true
     error:
       severity: ERROR
       message:  insufficient data left in message
-  - skip: true
-    query: rollback to savepoint try
 
-  - query: savepoint try
   - query: select sum_type_recv(int4send(2))
-    skip: true
     error:
       severity: ERROR
       MESSAGE: invalid discriminant
-  - skip: true
-    query: rollback to savepoint try
 
 - name: Adding variants
   steps:
