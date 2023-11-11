@@ -102,6 +102,7 @@ find_program(PGCLI pgcli)
 find_program(NETCAT nc REQUIRED)
 
 include(Version)
+include(Common)
 
 function(find_pg_yregress_tests dir)
     # Don't add the same tests more than once
@@ -151,9 +152,9 @@ function(add_postgresql_extension NAME)
     foreach(requirement ${_ext_REQUIRES})
         if(NOT TARGET ${requirement})
             if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../${requirement}")
-                add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../${requirement}" "${CMAKE_CURRENT_BINARY_DIR}/${requirement}")
+                add_subdirectory_once("${CMAKE_CURRENT_SOURCE_DIR}/../${requirement}" "${CMAKE_CURRENT_BINARY_DIR}/${requirement}")
             elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../../extensions/${requirement}")
-                add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../../extensions/${requirement}" "${CMAKE_CURRENT_BINARY_DIR}/${requirement}")
+                add_subdirectory_once("${CMAKE_CURRENT_SOURCE_DIR}/../../extensions/${requirement}" "${CMAKE_CURRENT_BINARY_DIR}/extensions/${requirement}")
             elseif(EXISTS "${PostgreSQL_EXTENSION_DIR}/${requirement}.control")
                 message(STATUS "Found matching installed extension")
             else()
@@ -292,9 +293,16 @@ $<$<NOT:$<BOOL:${_ext_SCHEMA}>>:#>schema = ${_ext_SCHEMA}
 
     file(GENERATE OUTPUT ${CMAKE_BINARY_DIR}/script_${NAME}
             CONTENT "#! /usr/bin/env bash
+# Indicate that we've started provisioning ${NAME}
+export SCRIPT_STARTED_${NAME}=1
 # Dependencies
 for r in $<JOIN:${_ext_REQUIRES}, > $<JOIN:${_ext_TESTS_REQUIRE}, >
 do
+    # If the dependency is already [being] provisioned, skip it
+    DEP=\"SCRIPT_STARTED_$r\"
+    if [ -n \"$\{!DEP\}\" ]; then
+        continue
+    fi
     if [ -f ${CMAKE_BINARY_DIR}/script_$r ]; then
         ${CMAKE_BINARY_DIR}/script_$r $1 || echo \"Skip $r\"
     else
