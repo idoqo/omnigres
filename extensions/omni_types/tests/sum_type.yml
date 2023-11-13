@@ -448,29 +448,41 @@ tests:
     - valid_send: true
       valid_recv: true
 
-  - query: select sum_type_recv(sum_type_send('text(Hello)'));
+  - query: select sum_type_recv(sum_type_send('text(Hello)'))
     results:
     - sum_type_recv: 'text(Hello)'
 
-  - query: select sum_type_recv(sum_type_send('integer(1000)'));
+  - query: select sum_type_recv(sum_type_send('integer(1000)'))
     results:
     - sum_type_recv: 'integer(1000)'
 
   - name: Malformed input
-  - query: select sum_type_recv(E''::bytea);
+    query: select sum_type_recv(E''::bytea)
     error:
       severity: ERROR
       message: input is too short to fit a discriminant
+
+- name: Insufficient data in message
+  steps:
+  - query: select omni_types.sum_type('sum_type', 'text', 'integer')
+    results:
+    - sum_type: sum_type
 
   - query: select sum_type_recv(int4send(1))
     error:
       severity: ERROR
       message:  insufficient data left in message
 
+- name: Invalid discriminant
+  steps:
+  - query: select omni_types.sum_type('sum_type', 'text', 'integer')
+    results:
+    - sum_type: sum_type
+
   - query: select sum_type_recv(int4send(2))
     error:
       severity: ERROR
-      MESSAGE: invalid discriminant
+      message: invalid discriminant
 
 - name: Adding variants
   steps:
@@ -610,13 +622,13 @@ tests:
   - query: *describe_types
     results:
     - schema: public
+      name: sum_type
+      description: null
+    - schema: public
       name: ok
       description: null
     - schema: public
       name: result
-      description: null
-    - schema: public
-      name: sum_type
       description: null
 
   - query: *dump_types
@@ -631,13 +643,13 @@ tests:
   - query: *describe_types
     results:
     - schema: public
+      name: sum_type
+      description: null
+    - schema: public
       name: ok
       description: null
     - schema: public
       name: result
-      description: null
-    - schema: public
-      name: sum_type
       description: null
 
   - query: *dump_types
