@@ -91,7 +91,7 @@ tests:
     steps:
     - query: SELECT omni_ext_test.wait_for_table('global_worker_started')
       results:
-      - wait_for_table: false
+      - wait_for_table: true
     
     #\d global_worker_started;
 
