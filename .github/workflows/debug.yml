@@ -14,15 +14,20 @@ on:
       os:
         description: 'OS'
         required: true
-        default: 'ubuntu-latest'
+        type: choice
+        options:
+        - ubuntu-latest
+        - macos-13
+        default: ubuntu-latest
       build:
         description: 'Build Omnigres?'
         required: true
-        default: 'true'
+        type: boolean
+        default: true
       pgver:
         description: 'Postgres version'
         required: true
-        default: '15'
+        default: '16'
       build_type:
         description: 'Build type'
         required: true
@@ -39,7 +44,7 @@ jobs:
         ref: ${{ github.event.inputs.ref }}
 
     - name: Install OpenSSL
-      if: github.event.inputs.os == 'macos-12'
+      if: github.event.inputs.os == 'macos-13'
       env:
         HOMEBREW_NO_AUTO_UPDATE: "1"
         HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: "1"
@@ -57,10 +62,10 @@ jobs:
 
     - name: Setup Docker on macOS using Colima, Lima-VM, and Homebrew.
       uses: douglascamata/setup-docker-macos-action@v1-alpha
-      if: github.event.inputs.os == 'macos-12' # No need to check on Linux, it's there
+      if: github.event.inputs.os == 'macos-13' # No need to check on Linux, it's there
 
     - name: Configure Docker host on macOS
-      if: github.event.inputs.os == 'macos-12'
+      if: github.event.inputs.os == 'macos-13'
       run: |
         echo "DOCKER_HOST=$(docker context inspect -f '{{ .Endpoints.docker.Host }}')" >> $GITHUB_ENV
         echo "DOCKER_HOST_IP=192.168.5.2" >> $GITHUB_ENV
@@ -71,16 +76,24 @@ jobs:
         key: ${{ github.event.inputs.os }}-pg-${{ github.event.inputs.pgver }}-${{ hashFiles('cmake/FindPostgreSQL.cmake') }}
 
     - name: Configure
-      if: github.event.inputs.build == 'true'
+      if: github.event.inputs.build
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
       # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
       run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{github.event.inputs.build_type}} -DPGVER=${{ github.event.inputs.pgver }}
 
     - name: Build
-      if: github.event.inputs.build == 'true'
+      if: github.event.inputs.build
       run: cmake --build ${{github.workspace}}/build --parallel --config ${{github.event.inputs.build_type}}
 
     - name: Setup upterm session
+      # upterm having trouble working on macos
+      if: github.event.inputs.os != 'macos-13'
       uses: lhotari/action-upterm@v1
+      with:
+        limit-access-to-actor: true
+
+    - name: Setup tmate session
+      if: github.event.inputs.os == 'macos-13'
+      uses: mxschmitt/action-tmate@v3
       with:
         limit-access-to-actor: true
