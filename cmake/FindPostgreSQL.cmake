@@ -61,11 +61,11 @@ if(NOT DEFINED PG_CONFIG)
     endif()
 
     # If the version is not known, try resolving the alias
-    set(PGVER_ALIAS_16 16.0)
-    set(PGVER_ALIAS_15 15.4)
-    set(PGVER_ALIAS_14 14.9)
-    set(PGVER_ALIAS_13 13.12)
-    set(PGVER_ALIAS_12 12.16)
+    set(PGVER_ALIAS_16 16.1)
+    set(PGVER_ALIAS_15 15.5)
+    set(PGVER_ALIAS_14 14.10)
+    set(PGVER_ALIAS_13 13.13)
+    set(PGVER_ALIAS_12 12.17)
 
     if("${PGVER}" MATCHES "[0-9]+.[0-9]+")
         set(PGVER_ALIAS "${PGVER}")
@@ -83,7 +83,12 @@ if(NOT DEFINED PG_CONFIG)
     endif()
 
     # This is where we manage all PostgreSQL installations
-    set(PGDIR "${CMAKE_CURRENT_LIST_DIR}/../.pg/${CMAKE_HOST_SYSTEM_NAME}-${CMAKE_BUILD_TYPE}" CACHE STRING "Path where to manage Postgres builds")
+    set(BUILD_TYPE "${CMAKE_BUILD_TYPE}")
+    if(NOT BUILD_TYPE)
+        set(BUILD_TYPE "Debug")
+    endif()
+
+    set(PGDIR "${CMAKE_CURRENT_LIST_DIR}/../.pg/${CMAKE_HOST_SYSTEM_NAME}-${BUILD_TYPE}" CACHE STRING "Path where to manage Postgres builds")
     get_filename_component(pgdir "${PGDIR}" ABSOLUTE)
 
     # This is where we manage selected PostgreSQL version's installations
@@ -123,7 +128,9 @@ if(NOT DEFINED PG_CONFIG)
             set(ENV{LDFLAGS} "${OLD_LDLAGS} -L ${OPENSSL_ROOT_DIR}/lib")
         endif()
 
-        if(CMAKE_BUILD_TYPE IN_LIST "Release;RelWithDebInfo")
+        if(BUILD_TYPE STREQUAL "RelWithDebInfo")
+            string(APPEND extra_configure_args " --enable-debug")
+        elseif(BUILD_TYPE STREQUAL "Release")
         else()
             string(APPEND extra_configure_args " --enable-debug --enable-cassert")
         endif()
