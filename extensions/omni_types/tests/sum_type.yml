@@ -43,6 +43,7 @@ tests:
         AND n.nspname <> 'pg_catalog'
         AND n.nspname <> 'information_schema'
         AND pg_catalog.pg_type_is_visible ( t.oid )
+        ORDER BY 1, 2
     query: *describe_types 
     results:
     - schema: public
@@ -230,10 +231,10 @@ tests:
   - query: *describe_types
     results:
     - schema: public
-      name: height
+      name: age
       description: null
     - schema: public
-      name: age
+      name: height
       description: null
     - schema: public
       name: sum_type
@@ -277,18 +278,17 @@ tests:
   - query: *describe_types
     results:
     - schema: public
-      name: pet
-      description: null
-    - schema: public
-      name: sum_type
+      name: animal
       description: null
     - schema: public
       name: person
       description: null
     - schema: public
-      name: animal
+      name: pet
       description: null
-
+    - schema: public
+      name: sum_type
+      description: null
   - query: *dump_types
     results:
     - typname: sum_type
@@ -622,13 +622,13 @@ tests:
   - query: *describe_types
     results:
     - schema: public
-      name: sum_type
-      description: null
-    - schema: public
       name: ok
       description: null
     - schema: public
       name: result
+      description: null
+    - schema: public
+      name: sum_type
       description: null
 
   - query: *dump_types
@@ -643,13 +643,13 @@ tests:
   - query: *describe_types
     results:
     - schema: public
-      name: sum_type
-      description: null
-    - schema: public
       name: ok
       description: null
     - schema: public
       name: result
+      description: null
+    - schema: public
+      name: sum_type
       description: null
 
   - query: *dump_types
