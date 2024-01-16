@@ -1,0 +1,62 @@
+instance:
+  config:
+    shared_preload_libraries: */env/OMNI_EXT_SO
+    max_worker_processes: 64
+  init:
+  - set session omni_httpd.init_port = 0
+  - create extension omni_httpd cascade
+  - create extension omni_httpc cascade
+  - delete from omni_httpd.configuration_reloads
+  - |
+    create or replace function http_301_without_location() returns omni_httpd.http_outcome as $$
+      select omni_httpd.http_response(status => 301)
+    $$ language sql
+  - |
+    create or replace function http_301_with_location() returns omni_httpd.http_outcome as $$
+      select omni_httpd.http_response(status => 301,
+        headers => array [omni_http.http_header('Location', '/200')])
+    $$ language sql
+  - |
+    create or replace function http_200_response() returns omni_httpd.http_outcome as $$
+      select omni_httpd.http_response(body => 'test', status => 200)
+    $$ language sql
+  - |
+    update omni_httpd.handlers set query = (
+     select omni_httpd.cascading_query(name, query order by priority desc nulls last) from
+      (values 
+          ('301-no-location', $$select http_301_without_location() from request where request.path='/301-no-location'$$, 1),
+          ('301-with-location', $$select http_301_with_location() from request where request.path='/301-with-location'$$, 1),
+          ('200', $$select http_200_response() from request where request.path='/200'$$, 1)
+       )
+       routes(name, query, priority)
+    )
+  - call omni_httpd.wait_for_configuration_reloads(1)
+
+tests:
+- name: make GET request
+  query: |
+    with response as (select * from omni_httpc.http_execute(
+           omni_httpc.http_request('http://127.0.0.1:' || 
+            (select effective_port from omni_httpd.listeners) || '/200')))
+    select response.status from response
+  results:
+  - status: 200
+
+- name: gets 301 without location
+  query: |
+    with response as (select * from omni_httpc.http_execute(
+           omni_httpc.http_request('http://127.0.0.1:' || 
+            (select effective_port from omni_httpd.listeners) || '/301-no-location')))
+    select response.status from response
+  results:
+  - status: 301
+
+- name: redirects if enabled and location is set
+  query: |
+    with response as (select * from omni_httpc.http_execute(
+           omni_httpc.http_request('http://127.0.0.1:' || 
+            (select effective_port from omni_httpd.listeners) || '/301-with-location', follow_redirect => true)))
+    select response.status from response
+  results:
+  - status: 200
+
