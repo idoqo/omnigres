@@ -679,6 +679,11 @@ int main(int argc, char **argv) {
     // Before starting, we try to open special FD for tap file
     tap_file = stdout;
 
+    // set pg_yregress as the process group leader
+    if (setpgid(0, getpid()) < 0) {
+      fprintf(stderr, "Failed to set yregress as process group leader\n");
+    }
+
     // Handle signals for cleanup, etc.
     register_sighandler();
 

@@ -1,0 +1,9 @@
+$schema: "https://raw.githubusercontent.com/omnigres/omnigres/master/pg_yregress/schema.json"
+
+instance:
+  init:
+  - create extension ltree cascade;
+  - restart: true # restart postgres instance
+tests:
+- name: sleep query
+  query: select pg_sleep(5);

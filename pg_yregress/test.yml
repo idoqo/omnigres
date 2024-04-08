@@ -9,7 +9,7 @@ instances:
     init:
     # This will be tested
     - alter system set shared_buffers = '193MB'
-    - restart:
+    - restart: true
   configured_text:
     init:
     # Test that we can init using usual test

@@ -5,8 +5,15 @@
 #include <stdint.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <signal.h>
 
 #include "pg_yregress.h"
+
+typedef enum {
+  POSTMASTER_READY,
+  POSTMASTER_STILL_STARTING,
+  POSTMASTER_FAILED,
+} PostgresStatus;
 
 static void retrieve_postmaster_pid(yinstance *instance) {
   if (instance->managed) {
@@ -18,10 +25,43 @@ static void retrieve_postmaster_pid(yinstance *instance) {
     char pid_str[32];
     assert(fgets(pid_str, sizeof(pid_str), fp));
     instance->pid = atol(pid_str);
-    assert(errno == 0);
     free(pid_filename);
     fclose(fp);
   }
+}
+
+static PostgresStatus wait_for_postmaster(yinstance *instance, pid_t pm_pid) {
+  int timeout_secs = 60;
+  int wait_per_sec = 20;
+  char *conninfo;
+
+  for (int i = 0; i < timeout_secs * wait_per_sec; i++) {
+    usleep(1000000L/wait_per_sec);
+
+    // attempt to connect to the default postgres database to check if the server is ready.
+    asprintf(&conninfo, "host=127.0.0.1 port=%d dbname=postgres user=yregress",
+             instance->info.managed.port);
+
+    PGconn *conn = PQconnectdb(conninfo);
+    if (PQstatus(conn) == CONNECTION_OK) {
+      free(conninfo);
+      return POSTMASTER_READY;
+    }
+
+    // return immediately if postgres failed to start
+    if (waitpid(pm_pid, NULL, WNOHANG) == pm_pid) {
+      free(conninfo);
+      fprintf(stderr, "postgres failed to start, check \"postgresql.log\"\n");
+      return POSTMASTER_FAILED;
+    }
+
+    free(conninfo);
+  }
+
+  fprintf(stderr, "postgres did not respond within %d seconds, check \"postgresql.log\"\n",
+          timeout_secs);
+  kill(pm_pid, SIGKILL);
+  return POSTMASTER_FAILED;
 }
 
 default_yinstance_result default_instance(struct fy_node *instances, yinstance **instance) {
@@ -204,6 +244,35 @@ connect:
   return yinstance_connect_failure;
 }
 
+void start_postgres(yinstance *instance, char *datadir) {
+  pid_t start_command_pid = fork();
+  if (start_command_pid < 0) {
+    fprintf(stderr, "Failed to setup instance: %s\n", strerror(errno));
+    return;
+  } else if (start_command_pid == 0) {
+    if (setpgid(0, getppid()) < 0) {
+      fprintf(stderr, "Failed to add child to process group: %s\n", strerror(errno));
+      _exit(1);
+    }
+
+    // use a shell instead of passing in running postgres directly to allow us redirect output.
+    char *pg_cmd;
+    asprintf(&pg_cmd, "exec \"%s/postgres\" -p %d -D %s < \"%s\" >> \"%s\" 2>&1",
+                   bindir, instance->info.managed.port, datadir, "/dev/null", "postgresql.log");
+
+    (void) execl("/bin/sh", "/bin/sh", "-c", pg_cmd, (char *) NULL);
+    // if exec fails
+    fprintf(stderr, "Failed to start instance: %s\n", strerror(errno));
+    exit(1);
+  } else {
+    if (wait_for_postmaster(instance, start_command_pid) != POSTMASTER_READY) {
+      fprintf(stderr, "Time-out while waiting for instance\n");
+      instances_cleanup();
+      return;
+    }
+  }
+}
+
 void yinstance_start(yinstance *instance) {
   if (instance->managed) {
 
@@ -265,24 +334,18 @@ void yinstance_start(yinstance *instance) {
     instance->restarted = false;
     instance->info.managed.port = get_available_inet_port();
 
-    char *start_command;
-    asprintf(&start_command,
-             "%s/pg_ctl start -o '-c port=%d -c log_destination=stderr -c logging_collector=on -c "
-             "log_filename=postgresql.log' -D "
-             "%s -s >/dev/null",
-             bindir, instance->info.managed.port, datadir);
-    system(start_command);
+    // Important to capture datadir before we try to start as init steps may restart the instance
+    // and it'll need the path
+    char *heap_datadir = strdup(datadir);
+    instance->info.managed.datadir = (iovec_t){.base = heap_datadir, .len = strlen(heap_datadir)};
+
+    start_postgres(instance, datadir);
 
     // Create the database
     char *createdb_command;
     asprintf(&createdb_command, "%s/createdb -U yregress -O yregress -p %d yregress", bindir,
              instance->info.managed.port);
     system(createdb_command);
-
-    // Important to capture datadir before we try to start as init steps may restart the instance
-    // and it'll need the path
-    char *heap_datadir = strdup(datadir);
-    instance->info.managed.datadir = (iovec_t){.base = heap_datadir, .len = strlen(heap_datadir)};
   }
 
   // Wait until it is ready
@@ -324,18 +387,18 @@ void instances_cleanup() {
       struct fy_node *instance = fy_node_pair_value(instance_pair);
       yinstance *y_instance = (yinstance *)fy_node_get_meta(instance);
 
-      if (y_instance != NULL && y_instance->ready) {
-        if (y_instance->managed) {
+      if (y_instance != NULL && y_instance->managed) {
+        if (y_instance->ready) {
           char *stop_command;
           asprintf(&stop_command, "%s/pg_ctl stop -D %.*s -m immediate -s", bindir,
                    (int)IOVEC_STRLIT(y_instance->info.managed.datadir));
           system(stop_command);
-
-          // Cleanup the directory
-          nftw(strndup(IOVEC_RSTRLIT(y_instance->info.managed.datadir)), remove_entry, FOPEN_MAX,
-               FTW_DEPTH | FTW_PHYS);
+          y_instance->ready = false;
         }
-        y_instance->ready = false;
+
+        // Cleanup the directory
+        nftw(strndup(IOVEC_RSTRLIT(y_instance->info.managed.datadir)), remove_entry, FOPEN_MAX,
+             FTW_DEPTH | FTW_PHYS);
       }
     }
   }
@@ -347,12 +410,12 @@ void restart_instance(yinstance *instance) {
   if (instance->managed) {
     char *restart_command;
     asprintf(&restart_command,
-             "%s/pg_ctl restart -o '-c port=%d -c log_destination=stderr -c logging_collector=on "
-             "-c log_filename=postgresql.log' "
+             "%s/pg_ctl stop "
              "-D %.*s -s >/dev/null",
-             bindir, instance->info.managed.port,
-             (int)IOVEC_STRLIT(instance->info.managed.datadir));
+             bindir, (int)IOVEC_STRLIT(instance->info.managed.datadir));
     system(restart_command);
+
+    start_postgres(instance, (char *)instance->info.managed.datadir.base);
     // Capture new PID
     retrieve_postmaster_pid(instance);
   }
