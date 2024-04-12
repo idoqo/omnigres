@@ -2,10 +2,10 @@
 #include <errno.h>
 #include <ftw.h>
 #include <netinet/in.h>
+#include <signal.h>
 #include <stdint.h>
 #include <sys/socket.h>
 #include <sys/types.h>
-#include <signal.h>
 
 #include "pg_yregress.h"
 
@@ -36,7 +36,7 @@ static PostgresStatus wait_for_postmaster(yinstance *instance, pid_t pm_pid) {
   char *conninfo;
 
   for (int i = 0; i < timeout_secs * wait_per_sec; i++) {
-    usleep(1000000L/wait_per_sec);
+    usleep(1000000L / wait_per_sec);
 
     // attempt to connect to the default postgres database to check if the server is ready.
     asprintf(&conninfo, "host=127.0.0.1 port=%d dbname=postgres user=yregress",
@@ -257,10 +257,10 @@ void start_postgres(yinstance *instance, char *datadir) {
 
     // use a shell instead of passing in running postgres directly to allow us redirect output.
     char *pg_cmd;
-    asprintf(&pg_cmd, "exec \"%s/postgres\" -p %d -D %s < \"%s\" >> \"%s\" 2>&1",
-                   bindir, instance->info.managed.port, datadir, "/dev/null", "postgresql.log");
+    asprintf(&pg_cmd, "exec \"%s/postgres\" -p %d -D %s < \"%s\" >> \"%s\" 2>&1", bindir,
+             instance->info.managed.port, datadir, "/dev/null", "postgresql.log");
 
-    (void) execl("/bin/sh", "/bin/sh", "-c", pg_cmd, (char *) NULL);
+    (void)execl("/bin/sh", "/bin/sh", "-c", pg_cmd, (char *)NULL);
     // if exec fails
     fprintf(stderr, "Failed to start instance: %s\n", strerror(errno));
     exit(1);
